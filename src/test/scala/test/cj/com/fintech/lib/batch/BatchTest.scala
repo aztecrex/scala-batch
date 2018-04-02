@@ -45,7 +45,7 @@ class BatchTest extends FunSuite {
     val ok = "a"
     val batch = Seq("x",ok,"z")
     val test = {s: String => s == ok}
-    val guard = { s: String => if (test(s)) context.pure(s) else context.abort("not ok")}
+    val guard = { s: String => if (test(s)) context.pure(s) else context.reject("not ok")}
     val a: Processor[String, String, String] = context.source()
     val processor = a.flatMap(guard)
 
@@ -110,7 +110,7 @@ class BatchTest extends FunSuite {
     val context = Bummer[Int, String]
     val batch = Seq(202, 303)
     val reason = "bleh"
-    val processor = context.abort(reason)
+    val processor = context.reject(reason)
     val f = {i: Int => i + 3}
 
     // when
@@ -146,7 +146,7 @@ class BatchTest extends FunSuite {
     val context = Bummer[Int, String]
     val batch = Seq(55, 66)
     val reason = "blah"
-    val processor = context.abort(reason)
+    val processor = context.reject(reason)
     val f = {i: Int => context.pure(i)}
 
     // when
@@ -165,7 +165,7 @@ class BatchTest extends FunSuite {
     val batch = Seq(202, 303)
     val reason = 'NoGood
 
-    val processor = context.abort(reason)
+    val processor = context.reject(reason)
 
     // when
     val actual = processor.exec(batch)
@@ -183,7 +183,7 @@ class BatchTest extends FunSuite {
     val reason = 'NotOK
     val batch = Seq("x", ok, "y")
     val test = {s: String => s == ok}
-    val processor = context.source().flatMap(s => if (test(s)) context.pure(s) else context.abort(reason) )
+    val processor = context.source().flatMap(s => if (test(s)) context.pure(s) else context.reject(reason) )
 
     // when
     val actual = processor.exec(batch)
@@ -200,7 +200,7 @@ class BatchTest extends FunSuite {
     val context = Bummer[Int, String]
     val batch = Seq(1,2)
     val reason = "what"
-    val processor = context.abort(reason)
+    val processor = context.reject(reason)
 
     // when
     val actual = processor.exec(batch)
@@ -253,7 +253,7 @@ class BatchTest extends FunSuite {
       i <- context.source()
       j = i + 1
       k <- context.pure(j * 17)
-      _ <- if (bad(i)) context.abort('Small) else context.pure(())
+      _ <- if (bad(i)) context.reject('Small) else context.pure(())
       v  = k.toString()
     } yield v
 
@@ -267,7 +267,7 @@ class BatchTest extends FunSuite {
   }
 
   case class Bummer[SRC, INCOMPLETE]() {
-    def abort[A](reason: INCOMPLETE): Processor[SRC, INCOMPLETE, A]
+    def reject[A](reason: INCOMPLETE): Processor[SRC, INCOMPLETE, A]
     = Processor(Function.const(Left(reason)))
 
     def pure[A](value: A): Processor[SRC, INCOMPLETE, A]
