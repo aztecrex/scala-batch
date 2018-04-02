@@ -9,7 +9,7 @@ class BatchTest extends FunSuite {
 
 
     // given
-    val context = Bummer[String, String]
+    val context = BatchContext[String, String]
     val batch = Seq("a", "b")
     val f = {s: String => s + " awesome"}
     val processor = context.source.map(f)
@@ -25,7 +25,7 @@ class BatchTest extends FunSuite {
   test("batch program tracks line number") {
 
     // given
-    val context = Bummer[String, String]
+    val context = BatchContext[String, String]
     val batch = Seq("a", "b")
     val f = {s: String => s + " awesome"}
     val processor = context.source().map(f)
@@ -41,7 +41,7 @@ class BatchTest extends FunSuite {
   test("batch program expresses line failure") {
 
     // given
-    val context = Bummer[String, String]
+    val context = BatchContext[String, String]
     val ok = "a"
     val batch = Seq("x",ok,"z")
     val test = {s: String => s == ok}
@@ -60,7 +60,7 @@ class BatchTest extends FunSuite {
   test("batch can handle non-string types") {
 
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(100, 200)
     val processor = context.source()
 
@@ -75,7 +75,7 @@ class BatchTest extends FunSuite {
   test("batch retains original") {
 
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(101, 202)
     val processor = context.source().map(_ + 1)
 
@@ -90,7 +90,7 @@ class BatchTest extends FunSuite {
   test("batch mappable context when continue") {
 
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(202, 303)
     val processor = context.source()
     val f = {i: Int => i + 3}
@@ -107,7 +107,7 @@ class BatchTest extends FunSuite {
   test("batch mappable context when aborted") {
 
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(202, 303)
     val reason = "bleh"
     val processor = context.reject(reason)
@@ -127,7 +127,7 @@ class BatchTest extends FunSuite {
   test("batch flat-mappable context when continue") {
 
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(51, 61)
     val change = {i: Int => i + 1}
     val processor = context.source().map(change)
@@ -143,7 +143,7 @@ class BatchTest extends FunSuite {
   test("batch flat-mappable context when aborted") {
 
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(55, 66)
     val reason = "blah"
     val processor = context.reject(reason)
@@ -161,7 +161,7 @@ class BatchTest extends FunSuite {
   test("capture abort values") {
 
     // given
-    val context = Bummer[Int, Symbol]
+    val context = BatchContext[Int, Symbol]
     val batch = Seq(202, 303)
     val reason = 'NoGood
 
@@ -178,7 +178,7 @@ class BatchTest extends FunSuite {
   test("complete and incomplete in same batch") {
 
     // given
-    val context = Bummer[String, Symbol]
+    val context = BatchContext[String, Symbol]
     val ok = "ok"
     val reason = 'NotOK
     val batch = Seq("x", ok, "y")
@@ -197,7 +197,7 @@ class BatchTest extends FunSuite {
 
   test("abort") {
     // given
-    val context = Bummer[Int, String]
+    val context = BatchContext[Int, String]
     val batch = Seq(1,2)
     val reason = "what"
     val processor = context.reject(reason)
@@ -214,7 +214,7 @@ class BatchTest extends FunSuite {
   test("pure") {
 
     // given
-    val context = Bummer[Int, String]()
+    val context = BatchContext[Int, String]()
     val batch = Seq(1,2)
     val v = "what"
     val processor = context.pure(v)
@@ -230,7 +230,7 @@ class BatchTest extends FunSuite {
   test("source") {
 
     // given
-    val context = Bummer[Int, Int]()
+    val context = BatchContext[Int, Int]()
     val batch = Seq(1,2)
     val processor = context.source()
 
@@ -246,7 +246,7 @@ class BatchTest extends FunSuite {
   test("demo1") {
 
     // given
-    val context = Bummer[Int, Symbol]
+    val context = BatchContext[Int, Symbol]
     val batch = Seq(5, 4, 3, 2, 1)
     val bad = {x: Int => x < 3}
     val processor = for {
@@ -266,7 +266,7 @@ class BatchTest extends FunSuite {
 
   }
 
-  case class Bummer[SRC, INCOMPLETE]() {
+  case class BatchContext[SRC, INCOMPLETE]() {
     def reject[A](reason: INCOMPLETE): Processor[SRC, INCOMPLETE, A]
     = Processor(Function.const(Left(reason)))
 
