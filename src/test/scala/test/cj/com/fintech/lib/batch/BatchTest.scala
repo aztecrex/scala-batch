@@ -47,7 +47,8 @@ class BatchTest extends FunSuite {
     val batch = Seq("x",ok,"z")
     val test = {s: String => s == ok}
     val guard = { s: String => if (test(s)) context.pure(s) else context.reject("not ok")}
-    val processor = context.source().flatMap(guard)
+    val p = context.source()
+    val processor = p.flatMap(guard)
 
     // when
     val actual = processor.run(batch)
