@@ -1,14 +1,18 @@
 package com.fintech.lib.batch
 
 case class BatchContext[SRC, INCOMPLETE]() {
+
+  def fold[A](initial: A)(f: (A, SRC) => A): BatchProcessor[SRC, INCOMPLETE, A]
+    = Ag[SRC, INCOMPLETE, A](ss => ss.foldLeft[A](initial)(f))
+
   def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A]
-  = Processor(Function.const(Left(reason)))
+    = Processor(Function.const(Left(reason)))
 
   def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A]
-  = Processor(Function.const(Right(value)))
+    = Processor(Function.const(Right(value)))
 
   def source(): BatchProcessor[SRC, INCOMPLETE, SRC]
-  = Processor(Right(_))
+    = Processor(Right(_))
 }
 
 trait BatchProcessor[SRC, INCOMPLETE, +A] {
@@ -23,8 +27,19 @@ trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
 }
 
+private[batch] case class Ag[SRC, INCOMPLETE, +A](f: Iterable[SRC] => A) extends BatchProcessor[SRC, INCOMPLETE, A]{
 
-private [batch] case class Processor[SRC, INCOMPLETE, +A](runLine: SRC => Either[INCOMPLETE, A]) extends BatchProcessor[SRC, INCOMPLETE, A] {
+  override def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = {
+
+    val a = f(batch)
+    batch.zipWithIndex.map(p => Item(p._2, p._1, a))
+
+  }
+
+
+}
+
+private[batch] case class Processor[SRC, INCOMPLETE, +A](runLine: SRC => Either[INCOMPLETE, A]) extends BatchProcessor[SRC, INCOMPLETE, A] {
 
   override def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B] = {
 

@@ -267,5 +267,23 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("aggregate") {
+    // given
+    val context = BatchContext[Int, Symbol]
+    val batch = Seq(1, 2, 3, 4)
+    val f = {(x: Int, ag: Int) => x + ag}
+    val processor = context.fold(5)(f)
+
+    // when
+    val actual = processor.run(batch)
+
+    // then
+    val sum = batch.fold(5)(_ + _)
+    assert(actual.map(_.value) === batch.map(Function.const(sum)))
+    assert(actual.map(_.source) === batch)
+    assert(actual.map(_.index) === batch.zipWithIndex.map(_._2))
+  }
+
+
 
 }
