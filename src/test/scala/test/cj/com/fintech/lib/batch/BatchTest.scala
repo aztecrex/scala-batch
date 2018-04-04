@@ -1,6 +1,6 @@
 package test.cj.com.fintech.lib.batch
 
-import com.fintech.lib.batch.{BatchContext, Item}
+import com.fintech.lib.batch.{BatchContext, BatchProcessor, Item}
 import org.scalatest.FunSuite
 
 class BatchTest extends FunSuite {
@@ -309,5 +309,29 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("fold does not consider rejected") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val bad = 150
+    val batch = Seq(100, bad, 200)
+
+    val sum = {(x: Int, ag: Int) => x + ag}
+
+    val processor = context
+      .source()
+      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+      .fold(0)(sum)
+
+    // when
+    val actual = processor.run(batch)
+
+    // then
+    val considered = batch.filter(_ != bad)
+    val summary = considered.foldLeft(0)(sum)
+    val expected = considered.map(Function.const(summary))
+    assert(actual.map(_.value) === expected)
+
+  }
 
 }
