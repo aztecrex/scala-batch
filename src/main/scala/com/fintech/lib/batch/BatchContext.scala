@@ -15,35 +15,27 @@ case class BatchContext[SRC, INCOMPLETE]() {
     = Processor(Right(_))
 }
 
-trait BatchProcessor[SRC, INCOMPLETE, +A] {
+sealed trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
   def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B] = ???
 
+
   def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B] = ???
 
-  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = ???
+  protected def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = ???
 
-  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = ???
+  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = exec_(batch).complete
+
+  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
 
 }
 
 private[batch] case class Ag[SRC, INCOMPLETE, +A](f: Iterable[SRC] => A) extends BatchProcessor[SRC, INCOMPLETE, A]{
 
-
-
-  private def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = {
-
+  override protected def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = {
     val a = f(batch)
     ProcessResult(batch.zipWithIndex.map(p => Item(p._2, p._1, Right(a))))
-
   }
-
-  override def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
-  override def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = {
-    exec_(batch).complete
-  }
-
-
 
 }
 
@@ -59,13 +51,7 @@ private[batch] case class Processor[SRC, INCOMPLETE, +A](runLine: SRC => Either[
     Processor(src => runLine(src).right.map(f))
   }
 
-  override def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = {
-    exec_(batch).complete
-  }
-
-  override def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
-
-  private def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A]
+  override protected def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A]
   = ProcessResult(batch.zipWithIndex.map(p => Item(p._2, p._1, runLine(p._1))))
 
 }
