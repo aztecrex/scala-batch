@@ -26,15 +26,12 @@ class BatchProcessor[SRC, INCOMPLETE, +A](private val r: Iterable[SRC] => Iterab
   def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B] = {
 
       val x = {sources: Iterable[SRC] =>
-        val maybeAs = r(sources)
-        val maybeAsWithsource: Iterable[(Either[INCOMPLETE, A], SRC)] = maybeAs.zip(sources)
-        val a: Iterable[(Either[INCOMPLETE, BatchProcessor[SRC, INCOMPLETE, _ <: B]], SRC)]
-                = maybeAsWithsource.map(p => (p._1.right.map(f), p._2))
-        val b: Iterable[Either[INCOMPLETE, Iterable[Either[INCOMPLETE, B]]]] = a.map(p => p._1.right.map(bp => bp.r(Seq(p._2))))
-        val c: Iterable[Either[INCOMPLETE, Either[INCOMPLETE, B]]] = b.map(e => e.right.map(ss => ss.head))
-        val d: Iterable[Either[INCOMPLETE, B]] = c.map(e => e.joinRight)
+        val unpacked = r(sources).zip(sources)
+        val applied = unpacked.map(p => (p._1.right.map(f), p._2))
+        val exploded = applied.map(p => p._1.right.map(bp => bp.r(Seq(p._2)).head))
+        val joined = exploded.map(e => e.joinRight)
 
-        d
+        joined
       }
       new BatchProcessor(x)
 
