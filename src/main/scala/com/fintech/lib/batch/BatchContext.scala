@@ -25,7 +25,7 @@ class BatchProcessor[SRC, INCOMPLETE, +A](private val r: Iterable[SRC] => Iterab
     new BatchProcessor({sources: Iterable[SRC] =>
       val unpacked = r(sources)
       val summary = unpacked.filter(_.isRight).map(_.right.get).foldLeft[B](initial)(f)
-      unpacked.map(Function.const(Right(summary)))
+      unpacked.map(x => x.right.map(Function.const(summary)))
     })
   }
 

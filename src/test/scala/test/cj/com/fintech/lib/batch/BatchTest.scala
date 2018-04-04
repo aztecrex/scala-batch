@@ -1,6 +1,6 @@
 package test.cj.com.fintech.lib.batch
 
-import com.fintech.lib.batch.{BatchContext, Item}
+import com.fintech.lib.batch.{BatchContext, BatchProcessor, Item}
 import org.scalatest.FunSuite
 
 class BatchTest extends FunSuite {
@@ -306,6 +306,53 @@ class BatchTest extends FunSuite {
     assert(actual.complete.map(_.source) === batch)
     assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
     assert(actual.incomplete.isEmpty)
+
+  }
+
+  test("fold does not consider rejected") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val bad = 150
+    val batch = Seq(100, bad, 200)
+
+    val sum = {(x: Int, ag: Int) => x + ag}
+
+    val processor = context
+      .source()
+      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+      .fold(0)(sum)
+
+    // when
+    val actual = processor.run(batch)
+
+    // then
+    val considered = batch.filter(_ != bad)
+    val summary = considered.foldLeft(0)(sum)
+    val expected = considered.map(Function.const(summary))
+    assert(actual.map(_.value) === expected)
+
+  }
+
+  test("fold propagates rejections") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val bad = 150
+    val batch = Seq(100, bad, 200)
+
+    val sum = {(x: Int, ag: Int) => x + ag}
+
+    val processor = context
+      .source()
+      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+      .fold(0)(sum)
+
+    // when
+    val actual = processor.exec(batch)
+
+    // then
+    assert(actual.incomplete == batch.zipWithIndex.filter(_._1 == bad).map(p => Item(p._2, p._1, 'Bad)))
 
   }
 
