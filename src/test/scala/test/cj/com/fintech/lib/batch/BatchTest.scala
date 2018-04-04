@@ -267,24 +267,46 @@ class BatchTest extends FunSuite {
 
   }
 
-  test("aggregate") {
+  test("fold aggregation") {
     // given
     val context = BatchContext[Int, Symbol]
     val batch = Seq(1, 2, 3, 4)
+    val init = 5
     val f = {(x: Int, ag: Int) => x + ag}
-    val processor = context.fold(5)(f)
+    val processor = context.fold(init)(f)
 
     // when
     val actual = processor.exec(batch)
 
     // then
-    val sum = batch.fold(5)(_ + _)
+    val sum = batch.fold(init)(_ + _)
     assert(actual.complete.map(_.value) === batch.map(Function.const(sum)))
     assert(actual.complete.map(_.source) === batch)
     assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
     assert(actual.incomplete.isEmpty)
   }
 
+  test("fold maps") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val batch = Seq(1, 2, 3, 4)
+    val init = 5
+    val faggr = {(x: Int, ag: Int) => x + ag}
+    val f = {x: Int => x + 17}
+    val processor = context.fold(5)(faggr).map(f)
+
+    // when
+    val actual = processor.exec(batch)
+
+    // then
+    val sum = batch.fold(init)(_ + _)
+    assert(actual.complete.map(_.value) === batch.map(Function.const(f(sum))))
+    assert(actual.complete.map(_.source) === batch)
+    assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
+    assert(actual.incomplete.isEmpty)
+
+  }
 
 
 }

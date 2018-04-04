@@ -30,10 +30,14 @@ sealed trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
 }
 
-private[batch] case class Ag[SRC, INCOMPLETE, +A](f: Iterable[SRC] => A) extends BatchProcessor[SRC, INCOMPLETE, A]{
+
+
+private[batch] case class Ag[SRC, INCOMPLETE, +A](aggr: Iterable[SRC] => A) extends BatchProcessor[SRC, INCOMPLETE, A]{
+
+  override def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B] = Ag(sources => f(aggr(sources)))
 
   override protected def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = {
-    val a = f(batch)
+    val a = aggr(batch)
     ProcessResult(batch.zipWithIndex.map(p => Item(p._2, p._1, Right(a))))
   }
 
