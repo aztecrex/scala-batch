@@ -1,6 +1,6 @@
 package test.cj.com.fintech.lib.batch
 
-import com.fintech.lib.batch.{BatchContext, Item, Processor}
+import com.fintech.lib.batch.{BatchContext, Item}
 import org.scalatest.FunSuite
 
 class BatchTest extends FunSuite {
