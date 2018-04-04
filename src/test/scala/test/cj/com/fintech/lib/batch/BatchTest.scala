@@ -334,4 +334,27 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("fold propagates rejections") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val bad = 150
+    val batch = Seq(100, bad, 200)
+
+    val sum = {(x: Int, ag: Int) => x + ag}
+
+    val processor = context
+      .source()
+      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+      .fold(0)(sum)
+
+    // when
+    val actual = processor.exec(batch)
+
+    // then
+    assert(actual.incomplete == batch.zipWithIndex.filter(_._1 == bad).map(p => Item(p._2, p._1, 'Bad)))
+
+  }
+
+
 }
