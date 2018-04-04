@@ -275,13 +275,14 @@ class BatchTest extends FunSuite {
     val processor = context.fold(5)(f)
 
     // when
-    val actual = processor.run(batch)
+    val actual = processor.exec(batch)
 
     // then
     val sum = batch.fold(5)(_ + _)
-    assert(actual.map(_.value) === batch.map(Function.const(sum)))
-    assert(actual.map(_.source) === batch)
-    assert(actual.map(_.index) === batch.zipWithIndex.map(_._2))
+    assert(actual.complete.map(_.value) === batch.map(Function.const(sum)))
+    assert(actual.complete.map(_.source) === batch)
+    assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
+    assert(actual.incomplete.isEmpty)
   }
 
 

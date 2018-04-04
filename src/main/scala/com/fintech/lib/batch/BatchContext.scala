@@ -29,12 +29,20 @@ trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
 private[batch] case class Ag[SRC, INCOMPLETE, +A](f: Iterable[SRC] => A) extends BatchProcessor[SRC, INCOMPLETE, A]{
 
-  override def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = {
+
+
+  private def exec_(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = {
 
     val a = f(batch)
-    batch.zipWithIndex.map(p => Item(p._2, p._1, a))
+    ProcessResult(batch.zipWithIndex.map(p => Item(p._2, p._1, Right(a))))
 
   }
+
+  override def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
+  override def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = {
+    exec_(batch).complete
+  }
+
 
 
 }
