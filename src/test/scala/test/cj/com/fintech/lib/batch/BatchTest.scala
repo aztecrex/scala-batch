@@ -1,6 +1,6 @@
 package test.cj.com.fintech.lib.batch
 
-import com.fintech.lib.batch.{BatchContext, Item, Processor}
+import com.fintech.lib.batch.{BatchContext, Item}
 import org.scalatest.FunSuite
 
 class BatchTest extends FunSuite {
@@ -264,6 +264,48 @@ class BatchTest extends FunSuite {
     // then
     val equivalent = {i: Int => ((i + 1) * 17).toString()}
     assert(actual === batch.zipWithIndex.filter(p => !bad(p._1)).map(p => Item(p._2, p._1, equivalent(p._1))))
+
+  }
+
+  test("fold sources") {
+    // given
+    val context = BatchContext[Int, Symbol]
+    val batch = Seq(1, 2, 3, 4)
+    val init = 5
+    val f = {(x: Int, ag: Int) => x + ag}
+    val processor = context.fold(init)(f)
+
+    // when
+    val actual = processor.exec(batch)
+
+    // then
+    val sum = batch.fold(init)(_ + _)
+    assert(actual.complete.map(_.value) === batch.map(Function.const(sum)))
+    assert(actual.complete.map(_.source) === batch)
+    assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
+    assert(actual.incomplete.isEmpty)
+  }
+
+
+  test("fold results") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val batch = Seq(2, 3, 4, 5)
+    val init = 6
+    val g = {x: Int => x + 19}
+    val f = {(x: Int, ag: Int) => x + ag}
+    val processor = context.source().map(g).fold(init)(f)
+
+    // when
+    val actual = processor.exec(batch)
+
+    // then
+    val sum = batch.map(g).fold(init)(_ + _)
+    assert(actual.complete.map(_.value) === batch.map(Function.const(sum)))
+    assert(actual.complete.map(_.source) === batch)
+    assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
+    assert(actual.incomplete.isEmpty)
 
   }
 
