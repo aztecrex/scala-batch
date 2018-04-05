@@ -287,6 +287,28 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("demo 2") {
+
+    // given
+    val context = BatchContext[String, Symbol]
+    import context._
+    val batch = Seq("header 1 - corn", "header 2 - cow", "data 1", "data 2")
+    val numHeaders = 2
+    val processor = for {
+      idx <- index()
+      _ <- if (idx < numHeaders) context.reject('Header) else context.pure(())
+      src <- source()
+      ans = src.reverse
+    } yield ans
+
+    // when
+    val actual = processor.run(batch)
+
+    // then
+    assert(actual.map(_.value) === batch.drop(numHeaders).map(_.reverse))
+
+  }
+
 //  test("fold results") {
 //
 //    // given
