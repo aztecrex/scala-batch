@@ -1,12 +1,8 @@
 package com.fintech.lib.batch
 
-case class BatchContext[SRC, INCOMPLETE]() {
+case class Ctx[SRC](source: SRC, index: BigInt)
 
-  def fold[A](initial: A)(f: (A, SRC) => A): BatchProcessor[SRC, INCOMPLETE, A] = ???
-//      = new BatchProcessor({sources: Iterable[SRC] =>
-//       val summary = sources.foldLeft[A](initial)(f)
-//       sources.map(Function.const(Right(summary)))
-//      })
+case class BatchContext[SRC, INCOMPLETE]() {
 
   def reject[A](reason: INCOMPLETE): AltProcessor[SRC, INCOMPLETE, A]
     = new AltProcessor(Function.const(Left(reason)))
@@ -15,7 +11,10 @@ case class BatchContext[SRC, INCOMPLETE]() {
       = new AltProcessor(Function.const(Right(value)))
 
   def source(): AltProcessor[SRC, INCOMPLETE, SRC]
-    = new AltProcessor(Right(_))
+    = new AltProcessor(ctx => Right(ctx.source))
+
+  def index(): AltProcessor[SRC, INCOMPLETE, BigInt]
+    = new AltProcessor(ctx => Right(ctx.index))
 }
 
 
@@ -50,9 +49,18 @@ class BatchProcessor[SRC, INCOMPLETE, +A](private val r: Iterable[SRC] => Iterab
   def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
 }
 
-class AltProcessor[SRC, INCOMPLETE, +A](private val runLine: SRC => Either[INCOMPLETE, A]) {
+
+class AltProcessor[SRC, INCOMPLETE, +A](private val runLine: Ctx[SRC] => Either[INCOMPLETE, A]) {
 
   def fold[B](initial: B)(f: (B, A) => B): AltProcessor[SRC, INCOMPLETE, B] = {
+
+    val x = {ctx: Ctx[SRC] =>
+      val summary = initial
+      val maybeA = runLine(ctx)
+      maybeA.right.map(Function.const(summary))
+    }
+    new AltProcessor(x)
+
 //    new BatchProcessor({sources: Iterable[SRC] =>
 //      val unpacked = r(sources)
 //      val summary = unpacked.filter(_.isRight).map(_.right.get).foldLeft[B](initial)(f)
@@ -62,12 +70,14 @@ class AltProcessor[SRC, INCOMPLETE, +A](private val runLine: SRC => Either[INCOM
   }
 
   def map[B](f: A => B): AltProcessor[SRC, INCOMPLETE, B]
-    = new AltProcessor({source: SRC => runLine(source).right.map(f)})
+    = new AltProcessor({ctx: Ctx[SRC] => runLine(ctx).right.map(f)})
 
   def flatMap[B](f: A => AltProcessor[SRC, INCOMPLETE, _ <: B]): AltProcessor[SRC, INCOMPLETE, B]
-    = new AltProcessor({source: SRC => runLine(source).right.map(f).right.map(_.runLine(source)).joinRight})
+    = new AltProcessor({ctx: Ctx[SRC] => runLine(ctx).right.map(f).right.map(_.runLine(ctx)).joinRight})
 
-  protected def exec_(batch: Iterable[SRC]): Iterable[Either[INCOMPLETE,A]] = batch.map(runLine)
+  protected def exec_(batch: Iterable[SRC]): Iterable[Either[INCOMPLETE,A]] = {
+    batch.zipWithIndex.map(pp => Ctx(pp._1, pp._2)).map(runLine)
+  }
 
   private def result(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A]
     = ProcessResult(exec_(batch).zip(batch).zipWithIndex.map(pp => Item(pp._2, pp._1._2, pp._1._1)))
