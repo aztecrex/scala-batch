@@ -356,5 +356,25 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("demo 2") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val batch = Seq(1, 2, 3, 5, 4, 300)
+
+    val processor = for {
+      src <- context.source()
+      x = BigDecimal(src)
+      sum <- context.pure(x).fold(BigDecimal(0))((a, agg) => a + agg)
+      ans <- context.pure(x / sum)
+    } yield ans
+
+    // when
+    val actual = processor.run(batch)
+
+    fail()
+
+  }
+
 
 }
