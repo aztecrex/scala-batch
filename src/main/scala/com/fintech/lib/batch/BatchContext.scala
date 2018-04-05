@@ -1,21 +1,26 @@
 package com.fintech.lib.batch
+import Function.const
+case class Ctx[SRC](source: SRC, index: BigInt)
 
 case class BatchContext[SRC, INCOMPLETE]() {
 
-  def fold[A](initial: A)(f: (A, SRC) => A): BatchProcessor[SRC, INCOMPLETE, A]
-      = new BatchProcessor({sources: Iterable[SRC] =>
-       val summary = sources.foldLeft[A](initial)(f)
-       sources.map(Function.const(Right(summary)))
-      })
 
-  def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A]
-    = new BatchProcessor(sources => sources.map(Function.const(Left(reason))))
 
-  def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A]
-      = new BatchProcessor(sources => sources.map(Function.const(Right(value))))
+  def reject[A](reason: INCOMPLETE): AltProcessor[SRC, INCOMPLETE, A]
+    = new AltProcessor(const(Left(reason)))
 
-  def source(): BatchProcessor[SRC, INCOMPLETE, SRC]
-    = new BatchProcessor(sources => sources.map(Right(_)))
+  def pure[A](value: A): AltProcessor[SRC, INCOMPLETE, A]
+      = new AltProcessor(const(Right(value)))
+
+  def source(): AltProcessor[SRC, INCOMPLETE, SRC]
+    = new AltProcessor(ctx => Right(ctx.source))
+
+  def index(): AltProcessor[SRC, INCOMPLETE, BigInt]
+    = new AltProcessor(ctx => Right(ctx.index))
+
+  def guard[B](predicate: B => Boolean, reason: INCOMPLETE): B => AltProcessor[SRC, INCOMPLETE, Unit]
+    = {b => if (predicate(b)) pure(()) else reject(reason)}
+
 }
 
 
@@ -48,5 +53,42 @@ class BatchProcessor[SRC, INCOMPLETE, +A](private val r: Iterable[SRC] => Iterab
   }
   def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = exec_(batch).complete
   def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
+}
+
+
+class AltProcessor[SRC, INCOMPLETE, +A](private val runLine: Ctx[SRC] => Either[INCOMPLETE, A]) {
+
+  def fold[B](initial: B)(f: (B, A) => B): AltProcessor[SRC, INCOMPLETE, B] = {
+
+    val x = {ctx: Ctx[SRC] =>
+      val summary = initial
+      val maybeA = runLine(ctx)
+      maybeA.right.map(Function.const(summary))
+    }
+    new AltProcessor(x)
+
+//    new BatchProcessor({sources: Iterable[SRC] =>
+//      val unpacked = r(sources)
+//      val summary = unpacked.filter(_.isRight).map(_.right.get).foldLeft[B](initial)(f)
+//      unpacked.map(x => x.right.map(Function.const(summary)))
+//    })
+    ???
+  }
+
+  def map[B](f: A => B): AltProcessor[SRC, INCOMPLETE, B]
+    = new AltProcessor({ctx: Ctx[SRC] => runLine(ctx).right.map(f)})
+
+  def flatMap[B](f: A => AltProcessor[SRC, INCOMPLETE, _ <: B]): AltProcessor[SRC, INCOMPLETE, B]
+    = new AltProcessor({ctx: Ctx[SRC] => runLine(ctx).right.map(f).right.map(_.runLine(ctx)).joinRight})
+
+  protected def exec_(batch: Iterable[SRC]): Iterable[Either[INCOMPLETE,A]] = {
+    batch.zipWithIndex.map(pp => Ctx(pp._1, pp._2)).map(runLine)
+  }
+
+  private def result(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A]
+    = ProcessResult(exec_(batch).zip(batch).zipWithIndex.map(pp => Item(pp._2, pp._1._2, pp._1._1)))
+
+  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = result(batch).complete
+  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = result(batch)
 }
 
