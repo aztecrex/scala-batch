@@ -248,13 +248,14 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, Symbol]
+    import context._
     val batch = Seq(5, 4, 3, 2, 1)
-    val bad = {x: Int => x < 3}
+    val bigEnough = {x: Int => x >= 3}
     val processor = for {
-      i <- context.source()
+      i <- source()
       j = i + 1
-      k <- context.pure(j * 17)
-      _ <- if (bad(i)) context.reject('Small) else context.pure(())
+      k <- pure(j * 17)
+      _ <- guard(bigEnough, 'Small)(i)
       v  = k.toString()
     } yield v
 
@@ -263,7 +264,7 @@ class BatchTest extends FunSuite {
 
     // then
     val equivalent = {i: Int => ((i + 1) * 17).toString()}
-    assert(actual === batch.zipWithIndex.filter(p => !bad(p._1)).map(p => Item(p._2, p._1, equivalent(p._1))))
+    assert(actual === batch.zipWithIndex.filter(p => bigEnough(p._1)).map(p => Item(p._2, p._1, equivalent(p._1))))
 
   }
 
@@ -296,7 +297,7 @@ class BatchTest extends FunSuite {
     val numHeaders = 2
     val processor = for {
       idx <- index()
-      _ <- if (idx < numHeaders) context.reject('Header) else context.pure(())
+      _ <- guard({v: BigInt => v >= numHeaders}, 'Header)(idx)
       src <- source()
       ans = src.reverse
     } yield ans
