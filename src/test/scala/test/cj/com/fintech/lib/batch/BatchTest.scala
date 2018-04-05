@@ -309,6 +309,33 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("guard") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    import Function.const
+    import context._
+    val batch = Seq(-3, 1, 2, 0, -12, -100, 24)
+    val test = {v: Int => v < 0}
+    val bad = 'Bad
+    val processor = source().flatMap(guard(test, bad))
+
+    // when
+    val actual = processor.exec(batch)
+
+
+    // then
+    val expected =
+      batch
+          .map(v => if (test(v)) Right(()) else Left(bad))
+          .zip(batch)
+          .zipWithIndex
+          .map(p => Item(p._2, p._1._2, p._1._1 ))
+    assert(actual.all === expected)
+
+  }
+
+
 //  test("fold results") {
 //
 //    // given

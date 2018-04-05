@@ -1,20 +1,26 @@
 package com.fintech.lib.batch
-
+import Function.const
 case class Ctx[SRC](source: SRC, index: BigInt)
 
 case class BatchContext[SRC, INCOMPLETE]() {
 
+
+
   def reject[A](reason: INCOMPLETE): AltProcessor[SRC, INCOMPLETE, A]
-    = new AltProcessor(Function.const(Left(reason)))
+    = new AltProcessor(const(Left(reason)))
 
   def pure[A](value: A): AltProcessor[SRC, INCOMPLETE, A]
-      = new AltProcessor(Function.const(Right(value)))
+      = new AltProcessor(const(Right(value)))
 
   def source(): AltProcessor[SRC, INCOMPLETE, SRC]
     = new AltProcessor(ctx => Right(ctx.source))
 
   def index(): AltProcessor[SRC, INCOMPLETE, BigInt]
     = new AltProcessor(ctx => Right(ctx.index))
+
+  def guard[B](predicate: B => Boolean, reason: INCOMPLETE): B => AltProcessor[SRC, INCOMPLETE, Unit]
+    = {b => if (predicate(b)) pure(()) else reject(reason)}
+
 }
 
 
