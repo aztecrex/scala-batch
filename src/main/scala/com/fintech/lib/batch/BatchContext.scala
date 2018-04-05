@@ -2,20 +2,20 @@ package com.fintech.lib.batch
 
 case class BatchContext[SRC, INCOMPLETE]() {
 
-  def fold[A](initial: A)(f: (A, SRC) => A): BatchProcessor[SRC, INCOMPLETE, A]
-      = new BatchProcessor({sources: Iterable[SRC] =>
-       val summary = sources.foldLeft[A](initial)(f)
-       sources.map(Function.const(Right(summary)))
-      })
+  def fold[A](initial: A)(f: (A, SRC) => A): BatchProcessor[SRC, INCOMPLETE, A] = ???
+//      = new BatchProcessor({sources: Iterable[SRC] =>
+//       val summary = sources.foldLeft[A](initial)(f)
+//       sources.map(Function.const(Right(summary)))
+//      })
 
-  def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A]
-    = new BatchProcessor(sources => sources.map(Function.const(Left(reason))))
+  def reject[A](reason: INCOMPLETE): AltProcessor[SRC, INCOMPLETE, A]
+    = new AltProcessor(Function.const(Left(reason)))
 
-  def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A]
-      = new BatchProcessor(sources => sources.map(Function.const(Right(value))))
+  def pure[A](value: A): AltProcessor[SRC, INCOMPLETE, A]
+      = new AltProcessor(Function.const(Right(value)))
 
-  def source(): BatchProcessor[SRC, INCOMPLETE, SRC]
-    = new BatchProcessor(sources => sources.map(Right(_)))
+  def source(): AltProcessor[SRC, INCOMPLETE, SRC]
+    = new AltProcessor(Right(_))
 }
 
 
@@ -48,5 +48,31 @@ class BatchProcessor[SRC, INCOMPLETE, +A](private val r: Iterable[SRC] => Iterab
   }
   def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = exec_(batch).complete
   def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = exec_(batch)
+}
+
+class AltProcessor[SRC, INCOMPLETE, +A](private val runLine: SRC => Either[INCOMPLETE, A]) {
+
+  def fold[B](initial: B)(f: (B, A) => B): AltProcessor[SRC, INCOMPLETE, B] = {
+//    new BatchProcessor({sources: Iterable[SRC] =>
+//      val unpacked = r(sources)
+//      val summary = unpacked.filter(_.isRight).map(_.right.get).foldLeft[B](initial)(f)
+//      unpacked.map(x => x.right.map(Function.const(summary)))
+//    })
+    ???
+  }
+
+  def map[B](f: A => B): AltProcessor[SRC, INCOMPLETE, B]
+    = new AltProcessor({source: SRC => runLine(source).right.map(f)})
+
+  def flatMap[B](f: A => AltProcessor[SRC, INCOMPLETE, _ <: B]): AltProcessor[SRC, INCOMPLETE, B]
+    = new AltProcessor({source: SRC => runLine(source).right.map(f).right.map(_.runLine(source)).joinRight})
+
+  protected def exec_(batch: Iterable[SRC]): Iterable[Either[INCOMPLETE,A]] = batch.map(runLine)
+
+  private def result(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A]
+    = ProcessResult(exec_(batch).zip(batch).zipWithIndex.map(pp => Item(pp._2, pp._1._2, pp._1._1)))
+
+  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = result(batch).complete
+  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = result(batch)
 }
 
