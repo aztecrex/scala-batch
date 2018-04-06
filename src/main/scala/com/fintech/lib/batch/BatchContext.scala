@@ -18,7 +18,7 @@ case class BatchContext[SRC, INCOMPLETE]() {
   def index(): BatchProcessor[SRC, INCOMPLETE, BigInt]
     = new BatchProcessor(ctx => Right(ctx.index))
 
-  def guard(test: Boolean, reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, Unit]
+  def guard(reason: INCOMPLETE)(test: Boolean): BatchProcessor[SRC, INCOMPLETE, Unit]
     = if (test) pure(()) else reject(reason)
 
 }
