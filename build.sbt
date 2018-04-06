@@ -19,6 +19,8 @@ developers := List(Developer("aztecrex",
 licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 publishMavenStyle := true
 
+addCommandAlias("release", ";+publishSigned ;sonatypeReleaseAll")
+
 // Add sonatype repository settings
 publishTo := Some(
   if (isSnapshot.value)
