@@ -8,12 +8,12 @@ class BatchTest extends FunSuite {
 
   test("batch program runs") {
 
-
     // given
     val context = BatchContext[String, String]
+    import context._
     val batch = Seq("a", "b")
     val f = {s: String => s + " awesome"}
-    val processor = context.source.map(f)
+    val processor = source.map(f)
 
     // when
     val actual = processor.run(batch)
@@ -27,9 +27,10 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[String, String]
+    import context._
     val batch = Seq("a", "b")
     val f = {s: String => s + " awesome"}
-    val processor = context.source().map(f)
+    val processor = source().map(f)
 
     // when
     val actual = processor.run(batch)
@@ -43,11 +44,12 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[String, String]
+    import context._
     val ok = "a"
     val batch = Seq("x",ok,"z")
     val test = {s: String => s == ok}
-    val guard = { s: String => if (test(s)) context.pure(s) else context.reject("not ok")}
-    val p = context.source()
+    val guard = { s: String => if (test(s)) pure(s) else reject("not ok")}
+    val p = source()
     val processor = p.flatMap(guard)
 
     // when
@@ -62,8 +64,9 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(100, 200)
-    val processor = context.source()
+    val processor = source()
 
     // when
     val actual = processor.run(batch)
@@ -77,8 +80,9 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(101, 202)
-    val processor = context.source().map(_ + 1)
+    val processor = source().map(_ + 1)
 
     // when
     val actual = processor.run(batch)
@@ -92,8 +96,9 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(202, 303)
-    val processor = context.source()
+    val processor = source()
     val f = {i: Int => i + 3}
 
     // when
@@ -109,9 +114,10 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(202, 303)
     val reason = "bleh"
-    val processor = context.reject(reason)
+    val processor = reject(reason)
     val f = {i: Int => i + 3}
 
     // when
@@ -129,10 +135,11 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(51, 61)
     val change = {i: Int => i + 1}
-    val processor = context.source().map(change)
-    val f = {a: Int => context.source().map(src => (src, a))}
+    val processor = source().map(change)
+    val f = {a: Int => source().map(src => (src, a))}
 
     // when
     val actual = processor.flatMap(f).run(batch)
@@ -145,10 +152,11 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(55, 66)
     val reason = "blah"
-    val processor = context.reject(reason)
-    val f = {i: Int => context.pure(i)}
+    val processor = reject(reason)
+    val f = {i: Int => pure(i)}
 
     // when
     val actual = processor.flatMap(f).exec(batch)
@@ -163,10 +171,11 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, Symbol]
+    import context._
     val batch = Seq(202, 303)
     val reason = 'NoGood
 
-    val processor = context.reject(reason)
+    val processor = reject(reason)
 
     // when
     val actual = processor.exec(batch)
@@ -180,11 +189,12 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[String, Symbol]
+    import context._
     val ok = "ok"
     val reason = 'NotOK
     val batch = Seq("x", ok, "y")
     val test = {s: String => s == ok}
-    val processor = context.source().flatMap(s => if (test(s)) context.pure(s) else context.reject(reason) )
+    val processor = source().flatMap(s => if (test(s)) pure(s) else reject(reason) )
 
     // when
     val actual = processor.exec(batch)
@@ -196,12 +206,13 @@ class BatchTest extends FunSuite {
 
   }
 
-  test("abort") {
+  test("reject") {
     // given
     val context = BatchContext[Int, String]
+    import context._
     val batch = Seq(1,2)
     val reason = "what"
-    val processor = context.reject(reason)
+    val processor = reject(reason)
 
     // when
     val actual = processor.exec(batch)
@@ -216,9 +227,10 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, String]()
+    import context._
     val batch = Seq(1,2)
     val v = "what"
-    val processor = context.pure(v)
+    val processor = pure(v)
 
     // when
     val actual = processor.exec(batch)
@@ -232,8 +244,9 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, Int]()
+    import context._
     val batch = Seq(1,2)
-    val processor = context.source()
+    val processor = source()
 
     // when
     val actual = processor.exec(batch)
