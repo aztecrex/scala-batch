@@ -1,6 +1,6 @@
 package test.cj.com.fintech.lib.batch
 
-import com.fintech.lib.batch.{BatchContext, BatchProcessor, Item}
+import com.cj.fintech.lib.batch.{BatchContext, Item}
 import org.scalatest.FunSuite
 
 class BatchTest extends FunSuite {
@@ -328,7 +328,6 @@ class BatchTest extends FunSuite {
 
     // given
     val context = BatchContext[Int, Symbol]
-    import Function.const
     import context._
     val batch = Seq(-3, 1, 2, 0, -12, -100, 24)
     val test = {v: Int => v < 0}

@@ -1,4 +1,5 @@
-package com.fintech.lib.batch
+package com.cj.fintech.lib.batch
+
 import Function.const
 case class Ctx[SRC](source: SRC, index: BigInt)
 

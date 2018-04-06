@@ -1,4 +1,4 @@
-package com.fintech.lib.batch
+package com.cj.fintech.lib.batch
 
 case class ProcessResult[SRC, INCOMPLETE, +A](all: Iterable[Item[SRC, Either[INCOMPLETE, A]]]) {
   def incomplete: Iterable[Item[SRC, INCOMPLETE]] = all.filter(_.value.isLeft).map(_.map(_.left.get))
