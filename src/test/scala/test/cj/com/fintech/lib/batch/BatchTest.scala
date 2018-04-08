@@ -349,6 +349,23 @@ class BatchTest extends FunSuite {
 
   }
 
+  test("reduce") {
+    // given
+    val context = BatchContext[String, Symbol]
+    import context._
+
+    val batch = Seq("a", "b", "c")
+    val init: BigInt = 7
+    val f = {(x: BigInt, y: BigInt) => x + y}
+    val processor = index().map(_ + 1).fold(init)(f)
+
+    // when
+    val actual = processor.run(batch)
+
+    assert(actual === Seq(1, 2, 3).map(BigInt(_)).foldLeft(init)(f))
+
+
+  }
 
 //  test("fold results") {
 //
