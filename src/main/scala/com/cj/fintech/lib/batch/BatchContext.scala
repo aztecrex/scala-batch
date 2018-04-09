@@ -28,21 +28,21 @@ case class BatchContext[SRC, INCOMPLETE]() {
 
 }
 
-private[batch] trait Step[FROM, TO]  {
-  type From = FROM
-  type To = TO
-  def apply[R](prev: R => FROM): R => TO
-}
-
-private[batch] abstract class AbstractStep[FROM, TO](transform: FROM => TO) extends Step[FROM, TO] {
-  override def apply[R](prev: R => FROM): R => TO = prev.andThen(transform)
-}
-
-private[batch] case class MapStep[A, INCOMPLETE, B](f: A => B)
-    extends AbstractStep[Iterable[Either[INCOMPLETE, A]], Iterable[Either[INCOMPLETE,B]]] (_.map(_.right.map(f)))
-
-private[batch] case class FlatMapStep[A, INCOMPLETE, B](f: A => Either[INCOMPLETE, B])
-  extends AbstractStep[Iterable[Either[INCOMPLETE, A]], Iterable[Either[INCOMPLETE,B]]] (_.map(_.right.map(f).joinRight))
+//private[batch] trait Step[FROM, TO]  {
+//  type From = FROM
+//  type To = TO
+//  def apply[R](prev: R => FROM): R => TO
+//}
+//
+//private[batch] abstract class AbstractStep[FROM, TO](transform: FROM => TO) extends Step[FROM, TO] {
+//  override def apply[R](prev: R => FROM): R => TO = prev.andThen(transform)
+//}
+//
+//private[batch] case class MapStep[A, INCOMPLETE, B](f: A => B)
+//    extends AbstractStep[Iterable[Either[INCOMPLETE, A]], Iterable[Either[INCOMPLETE,B]]] (_.map(_.right.map(f)))
+//
+//private[batch] case class FlatMapStep[A, INCOMPLETE, B](f: A => Either[INCOMPLETE, B])
+//  extends AbstractStep[Iterable[Either[INCOMPLETE, A]], Iterable[Either[INCOMPLETE,B]]] (_.map(_.right.map(f).joinRight))
 
 
 //private[batch] case class BindStep[A, INCOMPLETE, B](f: A => Either[INCOMPLETE, B]) extends Step[Either[INCOMPLETE, A], INCOMPLETE, B] {
@@ -83,38 +83,38 @@ private[batch] case class FlatMapStep[A, INCOMPLETE, B](f: A => Either[INCOMPLET
 
 case class BatchProcessor[SRC, INCOMPLETE, +A](run: Iterable[Ctx[SRC]] => Iterable[Either[INCOMPLETE, A]]) {
 
-  def fold[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B] = {
-//    val aggregate Aggregate
-//    val x = {ctx: Ctx[SRC] =>
-//      val summary = initial
-//      val maybeA = runLine(ctx)
-//      maybeA.right.map(Function.const(summary))
-//    }
-//    new BatchProcessor(x)
-    ???
+  def foldLeft[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B] = {
+    val next = {
+      contexts: Iterable[Ctx[SRC]] =>
+        val maybeAs = run(contexts)
+        val summary = maybeAs.filter(_.isRight).map(_.right.get).foldLeft(initial)(f)
+        maybeAs.map(_.right.map(const(summary)))
+    }
+    BatchProcessor(next)
   }
 
   def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B] = {
-    BatchProcessor(MapStep[A, INCOMPLETE, B](f).apply(run))
+    val next = {
+      contexts: Iterable[Ctx[SRC]] =>
+        run(contexts).map(_.right.map(f))
+    }
+    BatchProcessor(next)
   }
 
   def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B] = {
     val next = {
         contexts: Iterable[Ctx[SRC]] =>
-        val maybeAs: Iterable[Either[INCOMPLETE, A]] = run(contexts)
-        val maybeProcessors = maybeAs.map(_.right.map(f))
+        val maybeProcessors = run(contexts).map(_.right.map(f))
         val maybeRuns = maybeProcessors.map(_.right.map(_.run))
-        val maybeRunsWithContexts: Iterable[(Either[INCOMPLETE, Iterable[Ctx[SRC]] => Iterable[Either[INCOMPLETE, B]]], Ctx[SRC])] = maybeRuns.zip(contexts)
-        maybeRunsWithContexts.map {
+        maybeRuns.zip(contexts).map {
           p: ((Either[INCOMPLETE, Iterable[Ctx[SRC]] => Iterable[Either[INCOMPLETE, B]]], Ctx[SRC])) =>
-            val maybeRun = p._1
-            val ctx = p._2
-            val maybeSingletonB = maybeRun.right.map(run => run(Seq(ctx)))
-            val b: Either[INCOMPLETE, B] = maybeSingletonB match {
-              case Right(is) => is.head
-              case Left(reason) => Left(reason)
-            }
-            b
+          val maybeRun = p._1
+          val ctx = p._2
+          val maybeSingletonB = maybeRun.right.map(run => run(Seq(ctx)))
+          maybeSingletonB match {
+            case Right(is) => is.head
+            case Left(reason) => Left(reason)
+          }
         }
     }
     BatchProcessor(next)

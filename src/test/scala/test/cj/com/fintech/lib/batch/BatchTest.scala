@@ -2,6 +2,7 @@ package test.cj.com.fintech.lib.batch
 
 import com.cj.fintech.lib.batch.{BatchContext, Item}
 import org.scalatest.FunSuite
+import Function.const
 
 class BatchTest extends FunSuite {
 
@@ -126,7 +127,7 @@ class BatchTest extends FunSuite {
 
     // then
     assert(actual.complete.isEmpty)
-    assert(actual.incomplete.map(_.value) === batch.map(Function.const(reason)))
+    assert(actual.incomplete.map(_.value) === batch.map(const(reason)))
 
 
   }
@@ -163,7 +164,7 @@ class BatchTest extends FunSuite {
 
     // then
     assert(actual.complete.isEmpty)
-    assert(actual.incomplete.map(_.value) === batch.map(Function.const(reason)))
+    assert(actual.incomplete.map(_.value) === batch.map(const(reason)))
 
   }
 
@@ -181,7 +182,7 @@ class BatchTest extends FunSuite {
     val actual = processor.exec(batch)
 
     // then
-    assert(actual.incomplete.map(_.value) === batch.map(Function.const(reason)))
+    assert(actual.incomplete.map(_.value) === batch.map(const(reason)))
 
   }
 
@@ -219,7 +220,7 @@ class BatchTest extends FunSuite {
 
     // then
     assert(actual.complete.isEmpty)
-    assert(actual.incomplete.map(_.value) === batch.map(Function.const(reason)))
+    assert(actual.incomplete.map(_.value) === batch.map(const(reason)))
   }
 
 
@@ -236,7 +237,7 @@ class BatchTest extends FunSuite {
     val actual = processor.exec(batch)
 
     // then
-    assert(actual.complete.map(_.value) === batch.map(Function.const(v)))
+    assert(actual.complete.map(_.value) === batch.map(const(v)))
     assert(actual.incomplete.isEmpty)
   }
 
@@ -349,7 +350,7 @@ class BatchTest extends FunSuite {
 
   }
 
-  test("reduce") {
+  test("fold left") {
     // given
     val context = BatchContext[String, Symbol]
     import context._
@@ -357,104 +358,86 @@ class BatchTest extends FunSuite {
     val batch = Seq("a", "b", "c")
     val init: BigInt = 7
     val f = {(x: BigInt, y: BigInt) => x + y}
-    val processor = index().map(_ + 1).fold(init)(f)
+    val processor = index().map(_ + 1).foldLeft(init)(f)
 
     // when
-    val actual = processor.run(batch)
+    val actual = processor.exec(batch)
 
-    assert(actual === Seq(1, 2, 3).map(BigInt(_)).foldLeft(init)(f))
+    val sum = batch.zipWithIndex.map(_._2 + 1).map(BigInt(_)).foldLeft(init)(f)
+    assert(actual.complete === batch.zipWithIndex.map(p => Item(p._2, p._1, sum)))
+    assert(actual.incomplete.isEmpty)
+
 
 
   }
 
-//  test("fold results") {
-//
-//    // given
-//    val context = BatchContext[Int, Symbol]
-//    val batch = Seq(2, 3, 4, 5)
-//    val init = 6
-//    val g = {x: Int => x + 19}
-//    val f = {(x: Int, ag: Int) => x + ag}
-//    val processor = context.source().map(g).fold(init)(f)
-//
-//    // when
-//    val actual = processor.exec(batch)
-//
-//    // then
-//    val sum = batch.map(g).fold(init)(_ + _)
-//    assert(actual.complete.map(_.value) === batch.map(Function.const(sum)))
-//    assert(actual.complete.map(_.source) === batch)
-//    assert(actual.complete.map(_.index) === batch.zipWithIndex.map(_._2))
-//    assert(actual.incomplete.isEmpty)
-//
-//  }
-//
-//  test("fold does not consider rejected") {
-//
-//    // given
-//    val context = BatchContext[Int, Symbol]
-//    val bad = 150
-//    val batch = Seq(100, bad, 200)
-//
-//    val sum = {(x: Int, ag: Int) => x + ag}
-//
-//    val processor = context
-//      .source()
-//      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
-//      .fold(0)(sum)
-//
-//    // when
-//    val actual = processor.run(batch)
-//
-//    // then
-//    val considered = batch.filter(_ != bad)
-//    val summary = considered.foldLeft(0)(sum)
-//    val expected = considered.map(Function.const(summary))
-//    assert(actual.map(_.value) === expected)
-//
-//  }
-//
-//  test("fold propagates rejections") {
-//
-//    // given
-//    val context = BatchContext[Int, Symbol]
-//    val bad = 150
-//    val batch = Seq(100, bad, 200)
-//
-//    val sum = {(x: Int, ag: Int) => x + ag}
-//
-//    val processor = context
-//      .source()
-//      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
-//      .fold(0)(sum)
-//
-//    // when
-//    val actual = processor.exec(batch)
-//
-//    // then
-//    assert(actual.incomplete == batch.zipWithIndex.filter(_._1 == bad).map(p => Item(p._2, p._1, 'Bad)))
-//
-//  }
-//
-//  test("demo 2") {
-//
-//    // given
-//    val context = BatchContext[Int, Symbol]
-//    val batch = Seq(1, 2, 3, 5, 4, 300)
-//
-//    val processor = for {
-//      src <- context.source()
-//      x = BigDecimal(src)
-//      sum <- context.pure(x).fold(BigDecimal(0))((a, agg) => a + agg)
-//      ans <- context.pure(x / sum)
-//    } yield ans
-//
-//    // when
-//    val actual = processor.run(batch)
-//
-//    fail()
-//
-//  }
+  test("fold does not consider rejected") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val bad = 150
+    val batch = Seq(100, bad, 200)
+
+    val sum = {(x: Int, ag: Int) => x + ag}
+
+    val processor = context
+      .source()
+      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+      .foldLeft(0)(sum)
+
+    // when
+    val actual = processor.run(batch)
+
+    // then
+    val considered = batch.filter(_ != bad)
+    val summary = considered.foldLeft(0)(sum)
+    val expected = considered.map(const(summary))
+    assert(actual.map(_.value) === expected)
+
+  }
+
+  test("fold propagates rejections") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val bad = 150
+    val batch = Seq(100, bad, 200)
+
+    val sum = {(x: Int, ag: Int) => x + ag}
+
+    val processor = context
+      .source()
+      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+      .foldLeft(0)(sum)
+
+    // when
+    val actual = processor.exec(batch)
+
+    // then
+    assert(actual.incomplete == batch.zipWithIndex.filter(_._1 == bad).map(p => Item(p._2, p._1, 'Bad)))
+
+  }
+
+  test("demo 3") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    val batch = Seq(1, 2, 3, 5, 4, 300)
+
+    val processor = for {
+      src <- context.source()
+      x = BigDecimal(src)
+      sum <- context.pure(x).foldLeft(BigDecimal(0))((a, agg) => a + agg)
+      ans <- context.pure(x / sum)
+    } yield sum
+
+    // when
+    val actual = processor.run(batch)
+    println(actual)
+
+    fail()
+
+  }
 
 
 }
