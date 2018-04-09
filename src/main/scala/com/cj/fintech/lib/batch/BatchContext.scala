@@ -5,26 +5,26 @@ case class Ctx[SRC](source: SRC, index: BigInt)
 
 case class BatchContext[SRC, INCOMPLETE]() {
 
-  type Processor[A] = BatchProcessor[SRC, INCOMPLETE, _, A]
+  type Processor[A] = BatchProcessor[SRC, INCOMPLETE, A]
 
-  def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, Ctx[SRC], A]
-    = BatchProcessor(const(Left(reason)), _.map(Right(_)))
+  def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A]
+    = BatchProcessorX(const(Left(reason)), _.map(Right(_)))
 //    = BatchProcessor(ctxs => ctxs.map(const(Left(reason))))
 //    = new BatchProcessor(const(Left(reason)))
 
-  def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, Ctx[SRC], A]
-    = BatchProcessor(const(Right(value)), _.map(Right(_)))
+  def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A]
+    = BatchProcessorX(const(Right(value)), _.map(Right(_)))
 //      = new BatchProcessor(const(Right(value)))
 
-  def source(): BatchProcessor[SRC, INCOMPLETE, Ctx[SRC], SRC]
-    = BatchProcessor(ctx => Right(ctx.source), _.map(ctx => Right(ctx)))
+  def source(): BatchProcessor[SRC, INCOMPLETE, SRC]
+    = BatchProcessorX((ctx: Ctx[SRC]) => Right(ctx.source), _.map(ctx => Right(ctx)))
 //    = new BatchProcessor(ctx => Right(ctx.source))
 
-  def index(): BatchProcessor[SRC, INCOMPLETE, Ctx[SRC], BigInt]
-    = BatchProcessor(ctx => Right(ctx.index), _.map(ctx => Right(ctx)))
+  def index(): BatchProcessor[SRC, INCOMPLETE, BigInt]
+    = BatchProcessorX((ctx: Ctx[SRC]) => Right(ctx.index), _.map(ctx => Right(ctx)))
 //    = new BatchProcessor(ctx => Right(ctx.index))
 
-  def guard(reason: INCOMPLETE)(test: Boolean): BatchProcessor[SRC, INCOMPLETE, Ctx[SRC], Unit]
+  def guard(reason: INCOMPLETE)(test: Boolean): BatchProcessor[SRC, INCOMPLETE, Unit]
     = if (test) pure(()) else reject(reason)
 
 }
@@ -82,45 +82,61 @@ case class BatchContext[SRC, INCOMPLETE]() {
 //  }
 //}
 
+trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
-case class BatchProcessor[SRC, INCOMPLETE, TRANSIENT, +A](
+  def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B]
+  def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B]
+  def foldLeft[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B]
+
+
+
+  protected def exec_(batch: Iterable[SRC]): Iterable[(Either[INCOMPLETE,A], Ctx[SRC])]
+
+  private def result(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = {
+    ProcessResult(exec_(batch).map(p => Item(p._2.index, p._2.source, p._1)))
+  }
+  //    = ProcessResult(exec_(batch).zip(batch).zipWithIndex.map(pp => Item(pp._2, pp._1._2, pp._1._1)))
+
+  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = result(batch).complete
+  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = result(batch)
+
+}
+
+
+private[batch] case class BatchProcessorX[SRC, INCOMPLETE, TRANSIENT, +A](
        run: TRANSIENT => Either[INCOMPLETE, A],
-       prep: Iterable[Ctx[SRC]] => Iterable[Either[INCOMPLETE, TRANSIENT]]) {
+       prep: Iterable[Ctx[SRC]] => Iterable[Either[INCOMPLETE, TRANSIENT]])
+        extends BatchProcessor[SRC, INCOMPLETE, A] {
 
-  def foldLeft[B, C >: A](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, C, B] = {
-//    val prepNext = {
-//      contexts: Iterable[Ctx[SRC]] =>
-//        val maybeTransients: Iterable[Either[INCOMPLETE, TRANSIENT]] = prep(contexts)
-//        val maybeAs: Iterable[Either[INCOMPLETE, A]] = maybeTransients.map(_.right.flatMap(run))
-//        val summary = maybeAs.filter(_.isRight).map(_.right.get).foldLeft(initial)(f)
-//        maybeAs.map(_.right.map(const(summary)))
-//    }
-//    BatchProcessor((b: B) => Right(b), prepNext)
-//    ///
-////    val next = {
-////      contexts: Iterable[Ctx[SRC]] =>
-////        val maybeAs = run(contexts)
-////        val summary = maybeAs.filter(_.isRight).map(_.right.get).foldLeft(initial)(f)
-////        maybeAs.map(_.right.map(const(summary)))
-////    }
-////    BatchProcessor(next)
-    ???
+  override def foldLeft[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B] = {
+      val prepNext = {
+        contexts: Iterable[Ctx[SRC]] =>
+          val maybeTransients: Iterable[Either[INCOMPLETE, TRANSIENT]] = prep(contexts)
+          val maybeAs: Iterable[Either[INCOMPLETE, A]] = maybeTransients.map(_.right.flatMap(run))
+          val summary = maybeAs.filter(_.isRight).map(_.right.get).foldLeft(initial)(f)
+          maybeAs.map(_.right.map(const(summary)))
+      }
+      BatchProcessorX((b: B) => Right(b), prepNext)
   }
 
-  def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, TRANSIENT, B] = {
-    BatchProcessor(run(_).right.map(f), prep)
+  override def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B] = {
+    BatchProcessorX[SRC, INCOMPLETE, TRANSIENT,B](run(_).right.map(f), prep)
   }
 
-  def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, TRANSIENT, _ <: B]): BatchProcessor[SRC, INCOMPLETE, TRANSIENT, B] = {
+  override def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B] = {
     val next = {x: TRANSIENT =>
+      val a: Either[INCOMPLETE, BatchProcessor[SRC, INCOMPLETE, _ <: B]] = run(x).right.map(f)
+
+      CRUX OF THE MATTER RIGHT HERE, CANNOT KNOW WHAT TRANSIENT IS IN THE RETURNED PROCESSORS
       run(x).right.map(f)
+        .right.map(_.asInstanceOf[BatchProcessorX[SRC, INCOMPLETE, TRANSIENT, B]])
         .right.map(_.run).right.map(_(x))
         .joinRight
     }
-    BatchProcessor(next, prep)
+    BatchProcessorX(next, prep)
   }
 
-  protected def exec_(batch: Iterable[SRC]): Iterable[(Either[INCOMPLETE,A], Ctx[SRC])] = {
+  override protected def exec_(batch: Iterable[SRC]): Iterable[(Either[INCOMPLETE,A], Ctx[SRC])] = {
     val contexts = batch.zipWithIndex.map(p => Ctx(p._1, p._2))
     val prepped: Iterable[Either[INCOMPLETE, TRANSIENT]] = prep(contexts)
     val runned: Iterable[Either[INCOMPLETE, Either[INCOMPLETE, A]]] = prepped.map(_.right.map(run))
@@ -130,12 +146,5 @@ case class BatchProcessor[SRC, INCOMPLETE, TRANSIENT, +A](
 //    run(contexts).zip(contexts)
   }
 
-  private def result(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = {
-    ProcessResult(exec_(batch).map(p => Item(p._2.index, p._2.source, p._1)))
-  }
-//    = ProcessResult(exec_(batch).zip(batch).zipWithIndex.map(pp => Item(pp._2, pp._1._2, pp._1._1)))
-
-  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = result(batch).complete
-  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = result(batch)
 }
 
