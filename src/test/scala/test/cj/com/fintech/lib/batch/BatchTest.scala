@@ -420,25 +420,25 @@ class BatchTest extends FunSuite {
 
   test("demo 3") {
 
-    // given
-    val context = BatchContext[Int, Symbol]
-    import context._
-    val batch = Seq(1, 2, 3, 5, 4, 300)
-
-    val processor = for {
-      src <- source().map(BigDecimal(_))
-//      sum <- source().map(BigDecimal(_)).foldLeft(BigDecimal(0))((a, agg) => a + agg)
-      sum1 <- pure(src).foldLeft(BigDecimal(0))(_ + _)
-//      sum <- pure(x).foldLeft(BigDecimal(0))((a, agg) => a + agg)
-//      ans <- pure(x / sum)
-      n <- source().map(BigDecimal(_))
-//      ans <- source().map(BigDecimal(_)).map(_ / sum)
-      ans <- pure(n / sum1)
-    } yield sum1
-
-    // when
-    val actual = processor.run(batch)
-    println(actual)
+//    // given
+//    val context = BatchContext[Int, Symbol]
+//    import context._
+//    val batch = Seq(1, 2, 3, 5, 4, 300)
+//
+//    val processor = for {
+//      src <- source().map(BigDecimal(_))
+////      sum <- source().map(BigDecimal(_)).foldLeft(BigDecimal(0))((a, agg) => a + agg)
+//      sum1 <- pure(src).foldLeft(BigDecimal(0))(_ + _)
+////      sum <- pure(x).foldLeft(BigDecimal(0))((a, agg) => a + agg)
+////      ans <- pure(x / sum)
+//      n <- source().map(BigDecimal(_))
+////      ans <- source().map(BigDecimal(_)).map(_ / sum)
+//      ans <- pure(n / sum1)
+//    } yield sum1
+//
+//    // when
+//    val actual = processor.run(batch)
+//    println(actual)
 
     fail()
 
