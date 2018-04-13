@@ -1,28 +1,34 @@
 package com.cj.fintech.lib.batch
 
 import Function.const
-case class Ctx[SRC](source: SRC, index: BigInt, contexts: () => Iterable[Ctx[SRC]])
+case class Ctx[SRC](source: SRC, index: BigInt)
 
 case class BatchContext[SRC, INCOMPLETE]() {
 
   type Processor[A] = BatchProcessor[SRC, INCOMPLETE, A]
 
+  type Generator[A] = () => Iterable[Either[INCOMPLETE,A]]
+
   def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A]
-    = BatchProcessorY(const(Left(reason)))
+    = BatchProcessorY((_: Generator[A],_) => Left(reason))
 //    = BatchProcessor(ctxs => ctxs.map(const(Left(reason))))
 //    = new BatchProcessor(const(Left(reason)))
 
   def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A]
-    = BatchProcessorY(const(Right(value)))
+    = BatchProcessorY[SRC, INCOMPLETE, A]((_,_) => Right(value))
 //      = new BatchProcessor(const(Right(value)))
 
   def source(): BatchProcessor[SRC, INCOMPLETE, SRC]
-    = BatchProcessorY((ctx: Ctx[SRC]) => Right(ctx.source))
+    = BatchProcessorY[SRC, INCOMPLETE, SRC]((_, ctx) => Right(ctx.source))
 //    = new BatchProcessor(ctx => Right(ctx.source))
 
   def index(): BatchProcessor[SRC, INCOMPLETE, BigInt]
-    = BatchProcessorY((ctx: Ctx[SRC]) => Right(ctx.index))
+    = BatchProcessorY[SRC, INCOMPLETE, BigInt]((_, ctx) => Right(ctx.index))
 //    = new BatchProcessor(ctx => Right(ctx.index))
+
+  def sum(value: BigInt): BatchProcessor[SRC, INCOMPLETE, BigInt]
+  = BatchProcessorY(null)
+
 
   def guard(reason: INCOMPLETE)(test: Boolean): BatchProcessor[SRC, INCOMPLETE, Unit]
     = if (test) pure(()) else reject(reason)
@@ -86,7 +92,6 @@ trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
   def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B]
   def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B]
-  def foldLeft[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B]
 
   protected def exec_(batch: Iterable[SRC]): Iterable[(Either[INCOMPLETE,A], Ctx[SRC])]
 
@@ -102,53 +107,71 @@ trait BatchProcessor[SRC, INCOMPLETE, +A] {
 
 private [batch] case class BatchProcessorY[SRC, INCOMPLETE, +A]
   (
-    runLine: Ctx[SRC] => Either[INCOMPLETE, A]
+//    mapTransient: Ctx[SRC] => Either[INCOMPLETE, TRANSIENT],
+//    sumTransient: Iterable[TRANSIENT] => Either[INCOMPLETE, SUM],
+    runLine: (() => Iterable[Either[INCOMPLETE,_ >: A]], Ctx[SRC]) => Either[INCOMPLETE, A]
   )  extends BatchProcessor[SRC, INCOMPLETE, A] {
 
   override def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B])
     : BatchProcessor[SRC, INCOMPLETE, B] =
     {
-        val next = {
-          ctx: Ctx[SRC] =>
-            val maybeProc= runLine(ctx).right.map(f)
-            val maybeProcY = maybeProc.right.map(_.asInstanceOf[BatchProcessorY[SRC, INCOMPLETE, _ <: B]])
-            maybeProcY.right.flatMap(_.runLine(ctx))
-        }
-      BatchProcessorY(next)
+      ???
+//        val next = {
+//          (gen: (() => Either[INCOMPLETE, A]), ctx: Ctx[SRC]) =>
+//            val maybeProc = runLine(gen, ctx).right.map(f)
+//            val maybeProcY = maybeProc.right.map(_.asInstanceOf[BatchProcessorY[SRC, INCOMPLETE, TRANSIENT, SUM, _ <: B]])
+//            maybeProcY.right.flatMap(_.runLine(gen, ctx))
+//        }
+//      BatchProcessorY(mapTransient, sumTransient, next)
     }
 
   override def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B] = {
-    BatchProcessorY(ctx => runLine(ctx).right.map(f))
+
+//    val next = {
+//      (gen: (() => Either[INCOMPLETE, A]), ctx: Ctx[SRC]) =>
+//            runLine(gen,ctx).right.map(f)
+//    }
+//    // x => (ctx => runLine(ctx).right.map(f))
+//
+//    BatchProcessorY(next)
+    ???
   }
 
-  private def here(context: Ctx[SRC]): Iterable[Either[INCOMPLETE, A]] = {
-    context.contexts().map(runLine)
-  }
+//  private def here(context: Ctx[SRC]): Iterable[Either[INCOMPLETE, A]] = {
+//    context.contexts().map(runLine)
+//  }
 
-  override def foldLeft[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B] = {
-    val next = {
-      context: Ctx[SRC] =>
-        val maybeA = runLine(context)
-        maybeA match {
-          case Right(_) => {
-            val maybeAs = here(context)
-            val as = maybeAs.filter(_.isRight).map(_.right.get)
-            val summary = as.foldLeft(initial)(f)
-            Right(summary)
-          }
-          case Left(reason) => Left(reason)
-        }
-    }
-    BatchProcessorY(next)
-  }
+//  override def foldLeft[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B] = {
+//    val next = {
+//      context: Ctx[SRC] =>
+//        val maybeA = runLine(context)
+//        maybeA match {
+//          case Right(_) => {
+//            val maybeAs = here(context)
+//            val as = maybeAs.filter(_.isRight).map(_.right.get)
+//            val summary = as.foldLeft(initial)(f)
+//            Right(summary)
+//          }
+//          case Left(reason) => Left(reason)
+//        }
+//    }
+//    BatchProcessorY(next)
+//  }
 
-  private def genContexts(batch: Iterable[SRC]): Iterable[Ctx[SRC]] = {
-    batch.zipWithIndex.map(p => Ctx(p._1, p._2, () => genContexts(batch)))
-  }
+//  private def genContexts(batch: Iterable[SRC]): Iterable[Ctx[SRC]] = {
+//    batch.zipWithIndex.map(p => Ctx(p._1, p._2))
+//  }
 
   override protected def exec_(batch: Iterable[SRC]): Iterable[(Either[INCOMPLETE, A], Ctx[SRC])] = {
-    val contexts = genContexts(batch)
-    contexts.map(runLine).zip(contexts)
+//    val contexts = genContexts(batch)
+//    val gen = {
+//      () =>
+//        val maybeTransients = contexts.map(ctx => mapTransient(ctx))
+//        val transients = maybeTransients.filter(_.isRight).map(_.right.get)
+//        sumTransient(transients)
+//    }
+//    contexts.map(ctx => runLine(gen, ctx)).zip(contexts)
+    ???
   }
 }
 

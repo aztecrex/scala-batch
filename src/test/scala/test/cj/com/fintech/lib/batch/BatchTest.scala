@@ -350,99 +350,125 @@ class BatchTest extends FunSuite {
 
   }
 
-  test("fold left") {
-    // given
-    val context = BatchContext[String, Symbol]
-    import context._
-
-    val batch = Seq("a", "b", "c")
-    val init: BigInt = 7
-    val f = {(x: BigInt, y: BigInt) => x + y}
-    val processor = index().map(_ + 1).foldLeft(init)(f)
-
-    // when
-    val actual = processor.exec(batch)
-
-    val sum = batch.zipWithIndex.map(_._2 + 1).map(BigInt(_)).foldLeft(init)(f)
-    assert(actual.complete === batch.zipWithIndex.map(p => Item(p._2, p._1, sum)))
-    assert(actual.incomplete.isEmpty)
-
-
-
-  }
-
-  test("fold does not consider rejected") {
-
-    // given
-    val context = BatchContext[Int, Symbol]
-    val bad = 150
-    val batch = Seq(100, bad, 200)
-
-    val sum = {(x: Int, ag: Int) => x + ag}
-
-    val processor = context
-      .source()
-      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
-      .foldLeft(0)(sum)
-
-    // when
-    val actual = processor.run(batch)
-
-    // then
-    val considered = batch.filter(_ != bad)
-    val summary = considered.foldLeft(0)(sum)
-    val expected = considered.map(const(summary))
-    assert(actual.map(_.value) === expected)
-
-  }
-
-  test("fold propagates rejections") {
-
-    // given
-    val context = BatchContext[Int, Symbol]
-    val bad = 150
-    val batch = Seq(100, bad, 200)
-
-    val sum = {(x: Int, ag: Int) => x + ag}
-
-    val processor = context
-      .source()
-      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
-      .foldLeft(0)(sum)
-
-    // when
-    val actual = processor.exec(batch)
-
-    // then
-    assert(actual.incomplete == batch.zipWithIndex.filter(_._1 == bad).map(p => Item(p._2, p._1, 'Bad)))
-
-  }
-
-  test("demo 3") {
+  test("sum") {
 
     // given
     val context = BatchContext[Int, Symbol]
     import context._
-    val batch = Seq(1, 2, 3, 5, 4, 300)
 
+    val batch = Seq(12, 7, 4)
+    val f1 = {a: Int => a + 7}
+    val f2 = {a: Int => a + 13}
     val processor = for {
-      src <- source().map(BigDecimal(_))
-//      sum <- source().map(BigDecimal(_)).foldLeft(BigDecimal(0))((a, agg) => a + agg)
-      sum1 <- pure(src).foldLeft(BigDecimal(0))(_ + _)
-//      sum <- pure(x).foldLeft(BigDecimal(0))((a, agg) => a + agg)
-//      ans <- pure(x / sum)
-      n <- source().map(BigDecimal(_))
-//      ans <- source().map(BigDecimal(_)).map(_ / sum)
-      ans <- pure(n / sum1)
-    } yield sum1
+      src <- source()
+      a = f1(src)
+      b <- pure(f2(a))
+      ans <- sum(b)
+    } yield ans
 
     // when
     val actual = processor.run(batch)
-    println(actual)
 
-    fail()
+    // then
+    val summary = batch.map(f2.compose(f1)).foldLeft(0)(_ + _)
+    assert(actual.map(_.value) === batch.map(const(summary)))
+
 
   }
+
+//  test("fold left") {
+//    // given
+//    val context = BatchContext[String, Symbol]
+//    import context._
+//
+//    val batch = Seq("a", "b", "c")
+//    val init: BigInt = 7
+//    val f = {(x: BigInt, y: BigInt) => x + y}
+//    val processor = index().map(_ + 1).foldLeft(init)(f)
+//
+//    // when
+//    val actual = processor.exec(batch)
+//
+//    val sum = batch.zipWithIndex.map(_._2 + 1).map(BigInt(_)).foldLeft(init)(f)
+//    assert(actual.complete === batch.zipWithIndex.map(p => Item(p._2, p._1, sum)))
+//    assert(actual.incomplete.isEmpty)
+//
+//
+//
+//  }
+//
+//  test("fold does not consider rejected") {
+//
+//    // given
+//    val context = BatchContext[Int, Symbol]
+//    val bad = 150
+//    val batch = Seq(100, bad, 200)
+//
+//    val sum = {(x: Int, ag: Int) => x + ag}
+//
+//    val processor = context
+//      .source()
+//      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+//      .foldLeft(0)(sum)
+//
+//    // when
+//    val actual = processor.run(batch)
+//
+//    // then
+//    val considered = batch.filter(_ != bad)
+//    val summary = considered.foldLeft(0)(sum)
+//    val expected = considered.map(const(summary))
+//    assert(actual.map(_.value) === expected)
+//
+//  }
+//
+//  test("fold propagates rejections") {
+//
+//    // given
+//    val context = BatchContext[Int, Symbol]
+//    val bad = 150
+//    val batch = Seq(100, bad, 200)
+//
+//    val sum = {(x: Int, ag: Int) => x + ag}
+//
+//    val processor = context
+//      .source()
+//      .flatMap({v: Int => if (v == bad) context.reject('Bad) else context.pure(v)})
+//      .foldLeft(0)(sum)
+//
+//    // when
+//    val actual = processor.exec(batch)
+//
+//    // then
+//    assert(actual.incomplete == batch.zipWithIndex.filter(_._1 == bad).map(p => Item(p._2, p._1, 'Bad)))
+//
+//  }
+//
+//  test("demo 3") {
+//
+//    // given
+//    val context = BatchContext[Int, Symbol]
+//    import context._
+//    val batch = Seq(1, 2, 3, 5, 4, 300)
+//
+//    val processor = for {
+//      src <- source().map(BigDecimal(_))
+////      sum <- source().map(BigDecimal(_)).foldLeft(BigDecimal(0))((a, agg) => a + agg)
+//      sum1 <- pure(src).foldLeft(BigDecimal(0))(_ + _)
+////      sum <- pure(x).foldLeft(BigDecimal(0))((a, agg) => a + agg)
+////      ans <- pure(x / sum)
+//      n <- source().map(BigDecimal(_))
+////      ans <- source().map(BigDecimal(_)).map(_ / sum)
+//      ans <- pure(n / sum1)
+//    } yield sum1
+//
+//    // when
+//    val actual = processor.run(batch)
+//    println(actual)
+//
+//    fail()
+//
+//  }
 
 
 }
