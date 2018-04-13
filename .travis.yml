@@ -4,3 +4,9 @@ scala:
  - 2.11.12
  - 2.12.5
 
+
+notifications:
+  email:
+    on_success: change
+    on_failure: always
+
