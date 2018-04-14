@@ -16,7 +16,12 @@ crossScalaVersions := Seq("2.11.12", "2.12.5")
  */
 
 // `sbt release` to publish for all Scala versions
+// if version is SNAPSHOT, the releaseAll part will
+// fail
 addCommandAlias("release", ";+publishSigned ;sonatypeReleaseAll")
+
+// `sbt snapshot` to publish a snapshot
+addCommandAlias("snapshot", ";+publishSigned")
 
 
 // required project info
