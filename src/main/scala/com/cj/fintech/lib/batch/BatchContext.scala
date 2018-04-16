@@ -1,62 +1,73 @@
 package com.cj.fintech.lib.batch
 
-import Function.const
+import scala.Function.const
 case class Ctx[SRC](source: SRC, index: BigInt)
 
 case class BatchContext[SRC, INCOMPLETE]() {
 
-  type Processor[A] = BatchProcessor[SRC, INCOMPLETE, A]
-
-  def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A]
-    = new BatchProcessor(const(Left(reason)))
-
-  def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A]
-      = new BatchProcessor(const(Right(value)))
-
-  def source(): BatchProcessor[SRC, INCOMPLETE, SRC]
-    = new BatchProcessor(ctx => Right(ctx.source))
-
-  def index(): BatchProcessor[SRC, INCOMPLETE, BigInt]
-    = new BatchProcessor(ctx => Right(ctx.index))
+  def reject[A](reason: INCOMPLETE): BatchProcessor[SRC, INCOMPLETE, A] = new BatchProcessor(P.fixed(Left(reason)))
+  def pure[A](value: A): BatchProcessor[SRC, INCOMPLETE, A] = new BatchProcessor(P.fixed(Right(value)))
+  def source(): BatchProcessor[SRC, INCOMPLETE, SRC] = new BatchProcessor(P.context[SRC, INCOMPLETE]()).map(_.source)
+  def index(): BatchProcessor[SRC, INCOMPLETE, BigInt] = new BatchProcessor(P.context[SRC, INCOMPLETE]()).map(_.index)
 
   def guard(reason: INCOMPLETE)(test: Boolean): BatchProcessor[SRC, INCOMPLETE, Unit]
     = if (test) pure(()) else reject(reason)
 
 }
 
-class BatchProcessor[SRC, INCOMPLETE, +A](private val runLine: Ctx[SRC] => Either[INCOMPLETE, A]) {
+private[batch] object P {
 
-  def fold[B](initial: B)(f: (B, A) => B): BatchProcessor[SRC, INCOMPLETE, B] = {
+  type Compute[SRC, INCOMPLETE, A] = Ctx[SRC] => Either[INCOMPLETE, A]
 
-    val x = {ctx: Ctx[SRC] =>
-      val summary = initial
-      val maybeA = runLine(ctx)
-      maybeA.right.map(Function.const(summary))
-    }
-    new BatchProcessor(x)
-
-//    new BatchProcessor({sources: Iterable[SRC] =>
-//      val unpacked = r(sources)
-//      val summary = unpacked.filter(_.isRight).map(_.right.get).foldLeft[B](initial)(f)
-//      unpacked.map(x => x.right.map(Function.const(summary)))
-//    })
-    ???
+  def fixed[SRC, INCOMPLETE, A](maybeV: Either[INCOMPLETE, A]): Compute[SRC, INCOMPLETE, A] = {
+    const(maybeV)
   }
 
-  def map[B](f: A => B): BatchProcessor[SRC, INCOMPLETE, B]
-    = new BatchProcessor({ ctx: Ctx[SRC] => runLine(ctx).right.map(f)})
-
-  def flatMap[B](f: A => BatchProcessor[SRC, INCOMPLETE, _ <: B]): BatchProcessor[SRC, INCOMPLETE, B]
-    = new BatchProcessor({ ctx: Ctx[SRC] => runLine(ctx).right.map(f).right.map(_.runLine(ctx)).joinRight})
-
-  protected def exec_(batch: Iterable[SRC]): Iterable[Either[INCOMPLETE,A]] = {
-    batch.zipWithIndex.map(pp => Ctx(pp._1, pp._2)).map(runLine)
+  def context[SRC, INCOMPLETE](): Compute[SRC, INCOMPLETE, Ctx[SRC]] = {
+    new Right(_)
   }
 
-  private def result(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A]
-    = ProcessResult(exec_(batch).zip(batch).zipWithIndex.map(pp => Item(pp._2, pp._1._2, pp._1._1)))
+  def join[SRC, INCOMPLETE, A](nested: Compute[SRC, INCOMPLETE, Compute[SRC, INCOMPLETE, A]])
+    : Compute[SRC, INCOMPLETE, A] = {
+      ctx: Ctx[SRC] =>
+        nested(ctx).right.flatMap(_(ctx))
+  }
 
-  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = result(batch).complete
-  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = result(batch)
+  def map[SRC, INCOMPLETE, A, B](compute: Compute[SRC, INCOMPLETE, A])(f: A => B)
+    : Compute[SRC, INCOMPLETE, B] = {
+        ctx: Ctx[SRC] =>
+          compute(ctx).right.map(f)
+  }
+
+  def execute[SRC, INCOMPLETE, A](compute: Compute[SRC, INCOMPLETE, A])(batch: Iterable[Ctx[SRC]]): Iterable[Either[INCOMPLETE, A]] = {
+    batch.map(compute)
+  }
+
 }
 
+class BatchProcessor[SRC, INCOMPLETE, A](
+         private[batch] val compute: P.Compute[SRC, INCOMPLETE, A]
+     ) {
+
+    type Proc[X] = BatchProcessor[SRC, INCOMPLETE, X]
+    type This = Proc[A]
+    type Context = Ctx[SRC]
+    type Result = Either[INCOMPLETE, A]
+
+    def map[B](f: A => B): Proc[B] =  new BatchProcessor(P.map(compute)(f))
+
+    def flatMap[B](f: A => Proc[B]): Proc[B] =
+      new BatchProcessor(P.join(P.map(P.map(this.compute)(f))(_.compute)))
+
+    private def execute(contexts: Iterable[Context]): Iterable[Result] = P.execute(this.compute)(contexts)
+
+    protected def exec_(batch: Iterable[SRC]): Iterable[Item[SRC, Result]] = {
+      val contexts = batch.zipWithIndex.map(p => Ctx(p._1, p._2))
+      val results = execute(contexts)
+      results.zip(contexts).map(p => Item(p._2.index, p._2.source, p._1))
+    }
+
+  def run(batch: Iterable[SRC]): Iterable[Item[SRC,A]] = ProcessResult(exec_(batch)).complete
+  def exec(batch: Iterable[SRC]): ProcessResult[SRC, INCOMPLETE, A] = ProcessResult(exec_(batch))
+
+}
