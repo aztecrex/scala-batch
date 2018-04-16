@@ -48,16 +48,15 @@ class BatchTest extends FunSuite {
     import context._
     val ok = "a"
     val batch = Seq("x",ok,"z")
-    val test = {s: String => s == ok}
-    val guard = { s: String => if (test(s)) pure(s) else reject("not ok")}
+    val good = {s: String => s == ok}
     val p = source()
-    val processor = p.flatMap(guard)
+    val processor = p.flatMap(s => guard("not ok")(good(s)).map(const(s)))
 
     // when
     val actual = processor.run(batch)
 
     // then
-    assert(actual.map(_.value) === batch.filter(test))
+    assert(actual.map(_.value) === batch.filter(good))
 
   }
 
@@ -194,14 +193,14 @@ class BatchTest extends FunSuite {
     val ok = "ok"
     val reason = 'NotOK
     val batch = Seq("x", ok, "y")
-    val test = {s: String => s == ok}
-    val processor = source().flatMap(s => if (test(s)) pure(s) else reject(reason) )
+    val good = {s: String => s == ok}
+    val processor = source().flatMap(s => guard(reason)(good(s)).map(const(s)))
 
     // when
     val actual = processor.exec(batch)
 
     // then
-    val expected = batch.zipWithIndex.map(p => (p._2, p._1, if (test(p._1)) Right(p._1) else Left(reason) ))
+    val expected = batch.zipWithIndex.map(p => (p._2, p._1, if (good(p._1)) Right(p._1) else Left(reason) ))
     assert(actual.complete === expected.filter(t => t._3.isRight).map(t => Item(t._1, t._2, t._3.right.get)))
     assert(actual.incomplete === expected.filter(t => t._3.isLeft).map(t => Item(t._1, t._2,t._3.left.get)))
 
@@ -350,31 +349,51 @@ class BatchTest extends FunSuite {
 
   }
 
-  test("sum") {
-
-    // given
+  test("conditional successful in for") {
     val context = BatchContext[Int, Symbol]
     import context._
 
-    val batch = Seq(12, 7, 4)
-    val f1 = {a: Int => a + 7}
-    val f2 = {a: Int => a + 13}
+    val batch = Seq(19, 23, -1, 12, -100, 77, 40)
+    val f = (x: Int) => pure(x * 3)
+    val test = (x: Int) => x < 0
     val processor = for {
       src <- source()
-      a = f1(src)
-      b <- pure(f2(a))
-      ans <- sum(b)
+      fsrc <- f(src)
+      ans <- if (test(fsrc)) pure(fsrc) else pure(0)
     } yield ans
 
     // when
     val actual = processor.run(batch)
 
-    // then
-    val summary = batch.map(f2.compose(f1)).foldLeft(0)(_ + _)
-    assert(actual.map(_.value) === batch.map(const(summary)))
-
+    assert(actual.map(_.value) === batch.map(_ * 3).map(x => if (x < 0) x else 0))
 
   }
+
+//  test("sum") {
+//
+//    // given
+//    val context = BatchContext[BigInt, Symbol]
+//    import context._
+//
+//    val batch = Seq[BigInt](12, 7, 4)
+//    val f1 = {a: BigInt => a + BigInt(7)}
+//    val f2 = {a: BigInt => a + BigInt(13)}
+//    val processor = for {
+//      src <- source()
+//      a = f1(src)
+//      b <- pure(f2(a))
+//      ans <- sum(b)
+//    } yield ans
+//
+//    // when
+//    val actual = processor.run(batch)
+//
+//    // then
+//    val summary = batch.map(f2.compose(f1)).foldLeft(BigInt(0))(_ + _)
+//    assert(actual.map(_.value) === batch.map(const(summary)))
+//
+//
+//  }
 
 //  test("fold left") {
 //    // given
