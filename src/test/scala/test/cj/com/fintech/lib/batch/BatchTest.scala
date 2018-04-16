@@ -50,7 +50,7 @@ class BatchTest extends FunSuite {
     val batch = Seq("x",ok,"z")
     val good = {s: String => s == ok}
     val p = source()
-    val processor = p.flatMap(s => guard("not ok")(good(s)).map(const(s)))
+    val processor = p.flatMap(s => guard("not ok", s)(good(s)))
 
     // when
     val actual = processor.run(batch)
@@ -324,7 +324,7 @@ class BatchTest extends FunSuite {
 
   }
 
-  test("guard") {
+  test("guard unit") {
 
     // given
     val context = BatchContext[Int, Symbol]
@@ -332,7 +332,7 @@ class BatchTest extends FunSuite {
     val batch = Seq(-3, 1, 2, 0, -12, -100, 24)
     val test = {v: Int => v < 0}
     val bad = 'Bad
-    val processor = source().map(test(_)).flatMap((test: Boolean) => guard(bad)(test))
+    val processor = source().map(test(_)).flatMap(t=> guard(bad)(t))
 
     // when
     val actual = processor.exec(batch)
@@ -348,6 +348,32 @@ class BatchTest extends FunSuite {
     assert(actual.all === expected)
 
   }
+
+  test("guard value") {
+
+    // given
+    val context = BatchContext[Int, Symbol]
+    import context._
+    val batch = Seq(-3, 1, 2, 0, -12, -100, 24)
+    val good = {v: Int => v < 0}
+    val bad = 'Bad
+    val processor = source().map(good(_)).flatMap(t => guard(bad, 7)(t))
+
+    // when
+    val actual = processor.exec(batch)
+
+
+    // then
+    val expected =
+      batch
+        .map(v => if (good(v)) Right(7) else Left(bad))
+        .zip(batch)
+        .zipWithIndex
+        .map(p => Item(p._2, p._1._2, p._1._1 ))
+    assert(actual.all === expected)
+
+  }
+
 
   test("conditional successful in for") {
     val context = BatchContext[Int, Symbol]
