@@ -1,5 +1,7 @@
 package com.cj.fintech.lib.batch
 
+import com.cj.fintech.lib.batch.P.Compute
+
 import scala.Function.const
 case class Ctx[SRC](source: SRC, index: BigInt)
 
@@ -57,7 +59,7 @@ class BatchProcessor[SRC, INCOMPLETE, A](
     def map[B](f: A => B): Proc[B] =  new BatchProcessor(P.map(compute)(f))
 
     def flatMap[B](f: A => Proc[B]): Proc[B] =
-      new BatchProcessor(P.join(P.map(P.map(this.compute)(f))(_.compute)))
+        new BatchProcessor(P.join((P.map(this.compute)(f.andThen(_.compute)))))
 
     private def execute(contexts: Iterable[Context]): Iterable[Result] = P.execute(this.compute)(contexts)
 
